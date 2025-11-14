@@ -85,8 +85,27 @@ spec:
       workspaces:
         - name: output
           workspace: ws
-    - name: update-and-merge-pipeline-json
+    - name: increment-dev-tag
       runAfter: [read-pipeline-json]
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: increment-tag
+          - name: namespace
+            value: kevin-base-pipeline
+      params:
+        - name: IMAGE
+          value: $(params.IMAGE_REPO)
+        - name: NEW_TAG
+          value: $(tasks.read-pipeline-json.results.APP_VERSION)
+      workspaces:
+        - name: output
+          workspace: ws
+    - name: update-and-merge-pipeline-json
+      runAfter: [increment-dev-tag]
       taskRef:
         name: update-and-merge-pipeline-json
       # taskRef:
@@ -112,74 +131,28 @@ spec:
       workspaces:
         - name: output
           workspace: ws
-    # - name: git-merge
-    #   runAfter: [update-pipeline-json]
-    #   taskRef:
-    #     resolver: cluster
-    #     params:
-    #       - name: kind
-    #         value: task
-    #       - name: name
-    #         value: git-cli
-    #       - name: namespace
-    #         value: openshift-pipelines
-    #   params:
-    #     - name: REPO_URL
-    #       value: $(params.GIT_URL)
-    #     - name: SOURCE_BRANCH
-    #       value: $(params.GIT_REVISION)
-    #     - name: TARGET_BRANCH
-    #       value: develop
-    #     # - name: GIT_USER_NAME
-    #     #   type: string
-    #     #   default: "Tekton Merge Bot"
-    #     # - name: GIT_USER_EMAIL
-    #     #   type: string
-    #     #   default: "tekton@pipeline.local"
-    #   workspaces:
-    #     - name: output
-    #       workspace: ws
-    # - name: increment-dev-tag
-    #   runAfter: [read-pipeline-json]
-    #   taskRef:
-    #     resolver: cluster
-    #     params:
-    #       - name: kind
-    #         value: task
-    #       - name: name
-    #         value: increment-tag
-    #       - name: namespace
-    #         value: kevin-base-pipeline
-    #   params:
-    #     - name: IMAGE
-    #       value: $(params.IMAGE_REPO)
-    #     - name: NEW_TAG
-    #       value: $(tasks.read-pipeline-json.results.APP_VERSION)
-    #   workspaces:
-    #     - name: output
-    #       workspace: ws
-    # - name: build-and-push
-    #   runAfter: [increment-dev-tag]
-    #   taskRef:
-    #     resolver: cluster
-    #     params:
-    #       - name: kind
-    #         value: task
-    #       - name: name
-    #         value: buildah
-    #       - name: namespace
-    #         value: openshift-pipelines
-    #   params:
-    #     - name: IMAGE
-    #       value: $(tasks.increment-dev-tag.results.IMAGE_URL)
-    #     - name: DOCKERFILE
-    #       value: $(params.BUILD_CONTEXT)/Dockerfile
-    #     - name: CONTEXT
-    #       value: $(params.BUILD_CONTEXT)
-    #     - name: FORMAT
-    #       value: docker
-    #     - name: TLS_VERIFY
-    #       value: "false"
-    #   workspaces:
-    #     - name: source
-    #       workspace: ws
+    - name: build-and-push
+      runAfter: [increment-dev-tag]
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: namespace
+            value: openshift-pipelines
+      params:
+        - name: IMAGE
+          value: $(tasks.increment-dev-tag.results.IMAGE_URL)
+        - name: DOCKERFILE
+          value: $(params.BUILD_CONTEXT)/Dockerfile
+        - name: CONTEXT
+          value: $(params.BUILD_CONTEXT)
+        - name: FORMAT
+          value: docker
+        - name: TLS_VERIFY
+          value: "false"
+      workspaces:
+        - name: source
+          workspace: ws
