@@ -1,11 +1,11 @@
 {
     "CD":"true",
     "ocp_cluster":"aaa",
-    "app_version":"102925",
+    "app_version":"103025",
     "project_type":"docker",
     "pc_number":"aaa",
     "continuous_delivery": true,
     "TeamDL":"kaaa@aaa.com",
-    "app_name":"app_name3",
+    "app_name":"app_name4",
     "target_ocp_cluster": "aaa"
    }
