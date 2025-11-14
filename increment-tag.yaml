@@ -1,0 +1,44 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: increment-tag
+spec:
+  workspaces:
+  - name: output
+  params:
+  - name: IMAGE
+    type: string
+    description: Source image
+  - name: NEW_TAG
+    type: string
+    description: New tag to be used
+  results:
+  - description: |
+      Fully qualified image name.
+    name: IMAGE_URL
+    type: string
+  stepTemplate:
+    computeResources: {}
+    env:
+    - name: RESULTS_IMAGE_URL_PATH
+      value: $(results.IMAGE_URL.path)
+  steps:
+  - name: increment-tag
+    image: registry.access.redhat.com/ubi9/skopeo:latest
+    workingDir: /workspace/output
+    command: ["/bin/bash", "-c"]
+    args:
+      - |-
+        echo Get latest semantic versioned tag that matches '/^$(inputs.params.NEW_TAG)[.][0-9]+$/' from source image $(inputs.params.IMAGE)
+        TAG_EXISTS=`skopeo list-tags docker://$(inputs.params.IMAGE) | awk '{gsub(/^[ \t]+"|[",]/,"")}1' | awk '/^$(inputs.params.NEW_TAG)[.][0-9]+$/' | sort -rn | head -1`
+        echo -----------------------------------
+        # If no matching tag exists, then return "$(inputs.params.NEW_TAG).1" as the new tag
+        if [ -z "${TAG_EXISTS}" ]; then
+          echo "No matching tag exists, will use tag $(inputs.params.NEW_TAG).1"
+          echo -n "$(inputs.params.IMAGE):$(inputs.params.NEW_TAG).1" | tee ${RESULTS_IMAGE_URL_PATH}
+        else
+          # Otherwise, increment tag semantic version and append to $(inputs.params.NEW_TAG)
+          echo "Matching tag exists, will use tag ${NEXT_TAG}"
+          NEXT_TAG=$(echo ${TAG_EXISTS} | awk -F. -v OFS=. '{$NF += 1 ; print}')
+          echo -n "$(inputs.params.IMAGE):${NEXT_TAG}" | tee ${RESULTS_IMAGE_URL_PATH}
+        fi

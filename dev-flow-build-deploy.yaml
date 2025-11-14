@@ -1,0 +1,185 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: dev-flow-build-deploy
+  namespace: kevin
+spec:
+  params:
+    - name: GIT_URL
+      type: string
+      description: Git repository URL
+      default: 'https://github.com/kevchu3/testing-pipeline.git'
+    - name: GIT_REVISION
+      type: string
+      description: Git branch or tag to build
+      default: main
+    - name: IMAGE_REPO
+      type: string
+      description: Target image repository (e.g. quay.io/org/app)
+      default: 'image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/kevin-testing'
+    - name: BUILD_CONTEXT
+      type: string
+      description: Relative path to Dockerfile in the repo
+      default: '.'
+    - name: NEW_APP_VERSION
+      type: string
+      description: Update app_version in pipeline.json
+      default: '102725'
+    - name: NEW_APP_NAME
+      type: string
+      description: Update app_name in pipeline.json
+      default: 'app_name'
+    # - name: GIT_USER_NAME
+    #   type: string
+    #   description: Git username for committing changes
+    # - name: GIT_USER_EMAIL
+    #   type: string
+    #   description: Git email for committing changes
+    # - name: ARGOCD_SERVER
+    #   type: string
+    #   description: ArgoCD server address (e.g. argocd-server.openshift-gitops.svc.cluster.local)
+    # - name: ARGOCD_APP
+    #   type: string
+    #   description: Target ArgoCD application name to sync
+    # - name: ARGOCD_TOKEN_SECRET
+    #   type: string
+    #   description: Kubernetes Secret name that contains the ArgoCD auth token
+  workspaces:
+    - name: ws
+  tasks:
+    - name: clone
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      params:
+        - name: URL
+          value: $(params.GIT_URL)
+        - name: SSL_VERIFY
+          value: "false"
+        - name: SUBDIRECTORY
+          value: ""
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: REVISION
+          value: $(params.GIT_REVISION)
+      workspaces:
+        - name: output
+          workspace: ws
+    - name: read-pipeline-json
+      runAfter: [clone]
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: read-pipeline-json
+          - name: namespace
+            value: kevin-base-pipeline
+      workspaces:
+        - name: output
+          workspace: ws
+    - name: update-and-merge-pipeline-json
+      runAfter: [read-pipeline-json]
+      taskRef:
+        name: update-and-merge-pipeline-json
+      # taskRef:
+      #   resolver: cluster
+      #   params:
+      #     - name: kind
+      #       value: task
+      #     - name: name
+      #       value: update-and-merge-pipeline-json
+      #     - name: namespace
+      #       value: kevin-base-pipeline
+      params:
+        - name: REPO_URL
+          value: $(params.GIT_URL)
+        - name: SOURCE_BRANCH
+          value: $(params.GIT_REVISION)
+        - name: TARGET_BRANCH
+          value: develop
+        - name: NEW_APP_VERSION
+          value: $(params.NEW_APP_VERSION)
+        - name: NEW_APP_NAME
+          value: $(params.NEW_APP_NAME)
+      workspaces:
+        - name: output
+          workspace: ws
+    # - name: git-merge
+    #   runAfter: [update-pipeline-json]
+    #   taskRef:
+    #     resolver: cluster
+    #     params:
+    #       - name: kind
+    #         value: task
+    #       - name: name
+    #         value: git-cli
+    #       - name: namespace
+    #         value: openshift-pipelines
+    #   params:
+    #     - name: REPO_URL
+    #       value: $(params.GIT_URL)
+    #     - name: SOURCE_BRANCH
+    #       value: $(params.GIT_REVISION)
+    #     - name: TARGET_BRANCH
+    #       value: develop
+    #     # - name: GIT_USER_NAME
+    #     #   type: string
+    #     #   default: "Tekton Merge Bot"
+    #     # - name: GIT_USER_EMAIL
+    #     #   type: string
+    #     #   default: "tekton@pipeline.local"
+    #   workspaces:
+    #     - name: output
+    #       workspace: ws
+    # - name: increment-dev-tag
+    #   runAfter: [read-pipeline-json]
+    #   taskRef:
+    #     resolver: cluster
+    #     params:
+    #       - name: kind
+    #         value: task
+    #       - name: name
+    #         value: increment-tag
+    #       - name: namespace
+    #         value: kevin-base-pipeline
+    #   params:
+    #     - name: IMAGE
+    #       value: $(params.IMAGE_REPO)
+    #     - name: NEW_TAG
+    #       value: $(tasks.read-pipeline-json.results.APP_VERSION)
+    #   workspaces:
+    #     - name: output
+    #       workspace: ws
+    # - name: build-and-push
+    #   runAfter: [increment-dev-tag]
+    #   taskRef:
+    #     resolver: cluster
+    #     params:
+    #       - name: kind
+    #         value: task
+    #       - name: name
+    #         value: buildah
+    #       - name: namespace
+    #         value: openshift-pipelines
+    #   params:
+    #     - name: IMAGE
+    #       value: $(tasks.increment-dev-tag.results.IMAGE_URL)
+    #     - name: DOCKERFILE
+    #       value: $(params.BUILD_CONTEXT)/Dockerfile
+    #     - name: CONTEXT
+    #       value: $(params.BUILD_CONTEXT)
+    #     - name: FORMAT
+    #       value: docker
+    #     - name: TLS_VERIFY
+    #       value: "false"
+    #   workspaces:
+    #     - name: source
+    #       workspace: ws

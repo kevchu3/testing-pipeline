@@ -1,0 +1,92 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: update-and-merge-pipeline-json
+spec:
+  params:
+  - name: NEW_APP_VERSION
+    type: string
+    description: Update app_version in pipeline.json
+  - name: NEW_APP_NAME
+    type: string
+    description: Update app_name in pipeline.json
+  - name: REPO_URL
+    type: string
+    description: HTTPS or SSH URL of the Bitbucket repo
+  - name: SOURCE_BRANCH
+    type: string
+    description: Name of the target branch to commit code to (e.g., develop)
+  - name: GIT_USER_NAME
+    type: string
+    default: "Tekton Bot"
+  - name: GIT_USER_EMAIL
+    type: string
+    default: "tekton@pipeline.local"
+
+  steps:
+  - name: update
+    image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9:v1.20.0
+    workingDir: /workspace/output
+    env:
+      - name: BITBUCKET_USER
+        valueFrom:
+          secretKeyRef:
+            name: bitbucket-credentials
+            key: username
+      - name: BITBUCKET_PASS
+        valueFrom:
+          secretKeyRef:
+            name: bitbucket-credentials
+            key: password
+    command: ["/bin/bash", "-c"]
+    args:
+      - |-
+        set -e
+        echo "Resolve Git ownership at /workspace/output"
+        git config --global --add safe.directory /workspace/output
+
+        echo "Configuring Git credentials"
+        git config --global user.name "$(params.GIT_USER_NAME)"
+        git config --global user.email "$(params.GIT_USER_EMAIL)"
+
+        echo "Set authentication on remote repository"
+        git remote set-url origin https://${BITBUCKET_USER}:${BITBUCKET_PASS}@$(echo $(params.REPO_URL) | sed 's|https://||')
+
+        echo "Checking out target branch $(params.SOURCE_BRANCH)"
+        git checkout -B $(params.SOURCE_BRANCH)
+        git pull origin $(params.SOURCE_BRANCH)
+
+        FILE="pipeline.json"
+        if [[ ! -f $FILE ]] ; then
+          echo 'ERROR: Could not find $FILE'
+          exit 2
+        fi
+        
+        # string substitution match "app_version":" and preserve whitespace, replace the value and append with "
+        sed -i 's/\([ \t]*["]app_version["][ \t]*:[ \t]*"\)\([a-zA-Z0-9_-]*\)\(.*\)/\1$(inputs.params.NEW_APP_VERSION)\3/' $FILE
+
+        # and apply sed to app_name as well
+        sed -i 's/\([ \t]*["]app_name["][ \t]*:[ \t]*"\)\([a-zA-Z0-9_-]*\)\(.*\)/\1$(inputs.params.NEW_APP_NAME)\3/' $FILE
+
+        # TODO: REMOVE (DEBUG)
+        echo "=== DEBUG: File content ==="
+        cat "$FILE"
+        echo "==========================="
+
+        echo "Add and commit $FILE"
+        git add $FILE
+        git commit $FILE -m "Auto-commit to $(params.SOURCE_BRANCH) branch by $(params.GIT_USER_NAME) <$(params.GIT_USER_EMAIL)>"
+        COMMIT_EXIT=$?
+
+        if [ $COMMIT_EXIT -ne 0 ]; then
+          echo "Commit conflict detected — aborting"
+          exit 1
+        fi
+
+        echo "Pushing merged branch to origin/$(params.SOURCE_BRANCH)"
+        git push --set-upstream origin $(params.SOURCE_BRANCH)
+        git push origin $(params.SOURCE_BRANCH)
+        echo "Merge complete!"
+
+  workspaces:
+  - name: output

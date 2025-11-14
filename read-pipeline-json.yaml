@@ -1,0 +1,69 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: read-pipeline-json
+spec:
+  workspaces:
+    - name: output
+  results:
+    - name: APP_VERSION
+      description: "app_version field from pipeline.json"
+
+    - name: APP_NAME
+      description: "Environment name (env) from pipeline.json"
+      
+  steps:
+    - name: read
+      image: registry.access.redhat.com/ubi9/ubi-minimal
+      workingDir: /workspace/output
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        FILE="pipeline.json"
+
+        # TODO: REMOVE (DEBUG)
+        echo "=== DEBUG: Workspace Contents ==="
+        ls -lah /workspace/output || true
+        echo "================================="
+
+        # TODO: Is this a true behavior?  is it possible to note have a pipeldne.json
+        if [[ ! -f "$FILE" ]]; then
+          echo "ERROR: ${FILE} not found in $(pwd)"
+          exit 1
+        fi
+
+        # TODO: REMOVE (DEBUG)
+        echo "=== DEBUG: File content ==="
+        cat "$FILE"
+        echo "==========================="
+
+        extract_field() {
+          local key="$1"
+          grep -E "\"${key}\"[[:space:]]*:" "$FILE" | \
+            head -1 | \
+            sed -E 's/.*"'${key}'"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/'
+        }
+
+        APP_VERSION=$(extract_field "app_version" || true)
+        APP_NAME=$(extract_field "app_name" || true)
+
+        # TODO: Need to a min def of what a valid pipeline.json is
+        # Validate that base number exists
+        if [[ -z "$APP_VERSION" ]]; then
+          echo "ERROR: Failed to parse app_version from ${FILE}"
+          exit 2
+        fi
+
+        echo "DEBUG: Parsed app_version=$APP_VERSION"
+        echo "DEBUG: Parsed app_name=$APP_NAME"
+
+        # Write to Tekton result files
+        printf "%s" "$APP_VERSION" > "$(results.APP_VERSION.path)"
+        printf "%s" "$APP_NAME" > "$(results.APP_NAME.path)"
+
+        # TODO: REMOVE (DEBUG)
+        echo "=== DEBUG: Results written ==="
+        echo "APP_VERSION: $(cat $(results.APP_VERSION.path))"
+        echo "APP_NAME:         $(cat $(results.APP_NAME.path))"
+        echo "========================================"
