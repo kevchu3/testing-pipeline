@@ -1,7 +1,7 @@
 {
     "CD":"true",
     "ocp_cluster":"aaa",
-    "app_version":"102625",
+    "app_version":"102725",
     "project_type":"docker",
     "pc_number":"aaa",
     "continuous_delivery": true,
