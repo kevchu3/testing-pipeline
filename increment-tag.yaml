@@ -3,8 +3,6 @@ kind: Task
 metadata:
   name: increment-tag
 spec:
-  workspaces:
-  - name: output
   params:
   - name: IMAGE
     type: string
@@ -12,16 +10,19 @@ spec:
   - name: NEW_TAG
     type: string
     description: New tag to be used
+
   results:
   - description: |
       Fully qualified image name.
     name: IMAGE_URL
     type: string
+
   stepTemplate:
     computeResources: {}
     env:
     - name: RESULTS_IMAGE_URL_PATH
       value: $(results.IMAGE_URL.path)
+      
   steps:
   - name: increment-tag
     image: registry.access.redhat.com/ubi9/skopeo:latest
@@ -42,3 +43,6 @@ spec:
           NEXT_TAG=$(echo ${TAG_EXISTS} | awk -F. -v OFS=. '{$NF += 1 ; print}')
           echo -n "$(inputs.params.IMAGE):${NEXT_TAG}" | tee ${RESULTS_IMAGE_URL_PATH}
         fi
+
+  workspaces:
+  - name: output

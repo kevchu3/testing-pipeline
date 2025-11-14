@@ -50,8 +50,25 @@ spec:
         git config --global user.name "$(params.GIT_USER_NAME)"
         git config --global user.email "$(params.GIT_USER_EMAIL)"
 
-        echo "Set authentication on remote repository"
-        git remote set-url origin https://${BITBUCKET_USER}:${BITBUCKET_PASS}@$(echo $(params.REPO_URL) | sed 's|https://||')
+        urlencode() {
+          local string="${1}"
+          local strlen=${#string}
+          local encoded=""
+          local pos c o
+
+          for (( pos=0 ; pos<strlen ; pos++ )); do
+              c=${string:$pos:1}
+              case "$c" in
+                  [-._~a-zA-Z0-9] ) o="${c}" ;;
+                  * ) printf -v o '%%%02x' "'$c"
+              esac
+              encoded+="${o}"
+          done
+          echo "${encoded}"
+        }
+        echo "Set urlencoded authentication on remote repository"
+        BITBUCKET_PASS_ENCODED=$(urlencode ${BITBUCKET_PASS})
+        git remote set-url origin "https://${BITBUCKET_USER}:${BITBUCKET_PASS_ENCODED}@$(echo $(params.REPO_URL) | sed 's|https://||')"
 
         echo "Checking out target branch $(params.SOURCE_BRANCH)"
         git checkout -B $(params.SOURCE_BRANCH)
@@ -77,7 +94,7 @@ spec:
         echo "Add and commit $FILE"
         git add $FILE
         git commit $FILE -m "Auto-commit to $(params.SOURCE_BRANCH) branch by $(params.GIT_USER_NAME) <$(params.GIT_USER_EMAIL)>"
-        
+
         echo "Pushing merged branch to origin/$(params.SOURCE_BRANCH)"
         git push --set-upstream origin $(params.SOURCE_BRANCH)
         git push origin $(params.SOURCE_BRANCH)
