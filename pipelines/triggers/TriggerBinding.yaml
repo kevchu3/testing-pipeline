@@ -1,0 +1,18 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: dev-flow-binding
+  namespace: ocp-test-kb-dev
+spec:
+  params:
+    - name: GIT_URL
+      value: $(body.repository.url)
+
+    - name: GIT_REVISION
+      value: $(body.ref)
+
+    - name: IMAGE_REPO
+      value: $(body.image_repo)
+
+    - name: BUILD_CONTEXT
+      value: $(body.build_context)

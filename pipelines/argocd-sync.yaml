@@ -1,0 +1,66 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: argocd-sync
+  namespace: kevin-ocp-pipeline
+spec:
+  params:
+    - name: APPLICATION_NAME
+      type: string
+
+    - name: IMAGE
+      type: string
+
+    - name: SYNC
+      type: string
+      default: ""
+
+  stepTemplate:
+    envFrom:
+      - configMapRef:
+          name: argocd-env-configmap
+      - secretRef:
+          name: argocd-env-secret
+  steps:
+    - name: update-image
+      image: quay.io/argoproj/argocd:v2.9.3
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # TODO: REMOVE (DEBUG)
+        echo "=== ArgoCD Sync Task Starting ==="
+        echo "ArgoCD Server: ${ARGOCD_SERVER}"
+        echo "Application: $(params.APPLICATION_NAME)"
+        echo "Image: $(params.IMAGE)"
+        echo "=================================="
+
+        echo "Updating image for ArgoCD Kustomize app..."
+        argocd app set "$(params.APPLICATION_NAME)" \
+          --server "${ARGOCD_SERVER}" \
+          --auth-token "${ARGOCD_AUTH_TOKEN}" \
+          --kustomize-image "$(params.IMAGE)" \
+          --grpc-web --insecure
+
+        # If sync is set to anything trigger a sync
+        # expect default to ""
+        SYNC_VAL="$(params.SYNC)"
+        if [ -n "${SYNC_VAL}" ]; then
+
+          echo "Syncing ArgoCD application..."
+          argocd app sync "$(params.APPLICATION_NAME)" \
+            --server "${ARGOCD_SERVER}" \
+            --auth-token "${ARGOCD_AUTH_TOKEN}" \
+            --grpc-web --insecure
+        else
+          echo "Skipping sync"
+        fi
+
+        echo "Waiting for application health..."
+        argocd app wait "$(params.APPLICATION_NAME)" \
+          --server "${ARGOCD_SERVER}" \
+          --auth-token "${ARGOCD_AUTH_TOKEN}" \
+          --health \
+          --grpc-web --insecure
+
+        echo "Application $(params.APPLICATION_NAME) successfully updated."

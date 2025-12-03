@@ -1,0 +1,85 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ocp-test-kb-build
+  namespace: ocp-test-kb-dev
+spec:
+  params:
+  - name: git-url
+    type: string
+    description: Git code repository
+    default: 'https://github.com/kevchu3/kevin-testing-tekton.git'
+  - name: git-revision
+    type: string
+    description: Git revision to use
+    default: develop
+  - name: IMAGE
+    type: string
+    description: Image to be built
+    default: 'image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/ocp-testing-kb'
+  workspaces:
+  - name: my-workspace
+  tasks:
+  - name: git-clone
+    taskRef:
+      resolver: cluster
+      params:
+      - name: kind
+        value: task
+      - name: name
+        value: git-clone
+      - name: namespace
+        value: openshift-pipelines
+    workspaces:
+    - name: output
+      workspace: my-workspace
+    params:
+    - name: URL
+      value: $(params.git-url)
+    - name: SSL_VERIFY
+      value: "false"
+    - name: SUBDIRECTORY
+      value: ""
+    - name: DELETE_EXISTING
+      value: "true"
+    - name: REVISION
+      value: $(params.git-revision)
+  - name: build-image
+    taskRef:
+      resolver: cluster
+      params:
+      - name: kind
+        value: task
+      - name: name
+        value: buildah
+      - name: namespace
+        value: openshift-pipelines
+    workspaces:
+    - name: source
+      workspace: my-workspace
+    params:
+    - name: IMAGE
+      value: '$(params.IMAGE):dev-$(tasks.git-clone.results.COMMIT)'
+    - name: TLS_VERIFY
+      value: 'false'
+    - name: DOCKERFILE
+      value: 'Dockerfile'
+    runAfter:
+      - git-clone
+  # - name: tag-as-dev
+  #   taskRef:
+  #     resolver: cluster
+  #     params:
+  #     - name: kind
+  #       value: task
+  #     - name: name
+  #       value: skopeo-copy
+  #     - name: namespace
+  #       value: openshift-pipelines
+  #   params:
+  #   - name: SOURCE_IMAGE_URL
+  #     value: 'docker://$(tasks.build-image.results.IMAGE_URL)'
+  #   - name: DESTINATION_IMAGE_URL
+  #     value: 'docker://$(params.IMAGE):dev'
+  #   runAfter:
+  #     - build-image

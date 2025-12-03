@@ -1,0 +1,55 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: dev-flow-template
+  namespace: ocp-test-kb-dev
+spec:
+  params:
+    - name: GIT_URL
+      description: Git repo URL
+      default: https://github.com/kevchu3/kevin-testing-tekton.git
+
+    - name: GIT_REVISION
+      description: Branch or tag
+      default: develop
+
+    - name: IMAGE_REPO
+      description: Target image repository
+      default: image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/ocp-testing-kb
+
+    - name: BUILD_CONTEXT
+      description: Relative path to your Dockerfile from root
+      default: .
+      
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: dev-flow-build-deploy-
+      spec:
+        serviceAccountName: pipeline
+        pipelineRef:
+          name: dev-flow-build-deploy
+        params:
+          - name: GIT_URL
+            value: $(tt.params.GIT_URL)
+
+          - name: GIT_REVISION
+            value: $(tt.params.GIT_REVISION)
+
+          - name: IMAGE_REPO
+            value: $(tt.params.IMAGE_REPO)
+
+          - name: BUILD_CONTEXT
+            value: $(tt.params.BUILD_CONTEXT)
+
+        workspaces:
+          - name: ws
+            volumeClaimTemplate:
+              metadata:
+                name: ws-pvc
+              spec:
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: 1Gi

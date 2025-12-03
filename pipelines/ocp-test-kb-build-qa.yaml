@@ -1,0 +1,99 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ocp-test-kb-build-qa
+  namespace: ocp-test-kb-qa
+spec:
+  params:
+    - name: git-url
+      type: string
+      description: Git code repository
+      default: 'https://github.com/kevchu3/kevin-testing-tekton.git'
+
+    - name: git-revision
+      type: string
+      description: Git revision to use ie. rev-1001
+      default: rev-1001
+
+    - name: new-tag
+      type: string
+      description: New tag to be used ie. 102725.6
+      default: "102725"
+
+    - name: IMAGE
+      type: string
+      description: Image to be built (repo only, tag added by pipeline)
+      default: "image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/ocp-testing-kb"
+
+  workspaces:
+    - name: my-workspace
+
+  tasks:
+    - name: git-clone
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: my-workspace
+      params:
+        - name: URL
+          value: $(params.git-url)
+        - name: SSL_VERIFY
+          value: "false"
+        - name: SUBDIRECTORY
+          value: ""
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: REVISION
+          value: $(params.git-revision)
+
+    - name: increment-tag
+      params:
+      - name: IMAGE
+        value: $(params.IMAGE)
+      - name: NEW_TAG
+        value: $(params.new-tag)
+      runAfter:
+      - git-clone
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: increment-tag
+          - name: namespace
+            value: kevin-ocp-pipeline
+      workspaces:
+      - name: source
+        workspace: my-workspace
+        
+    - name: build-image
+      runAfter:
+        - increment-tag
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: source
+          workspace: my-workspace
+      params:
+        - name: IMAGE
+          value: $(tasks.increment-tag.results.IMAGE_URL)
+        - name: TLS_VERIFY
+          value: "false"
+        - name: DOCKERFILE
+          value: "Dockerfile"

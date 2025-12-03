@@ -1,0 +1,13 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: dev-flow-listener
+  namespace: ocp-test-kb-dev
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: curl
+      bindings:
+        - ref: dev-flow-binding
+      template:
+        ref: dev-flow-template

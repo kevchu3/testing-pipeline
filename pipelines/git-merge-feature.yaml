@@ -1,0 +1,79 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-merge-feature
+  namespace: kevin-ocp-pipeline
+spec:
+  params:
+    - name: REPO_URL
+      type: string
+      description: HTTPS or SSH URL of the Bitbucket repo
+
+    - name: SOURCE_BRANCH
+      type: string
+      description: Name of the feature branch to merge
+
+    - name: TARGET_BRANCH
+      type: string
+      description: Name of the target branch to receive the merge (e.g., develop)
+
+    - name: GIT_USER_NAME
+      type: string
+      default: "Tekton Merge Bot"
+
+    - name: GIT_USER_EMAIL
+      type: string
+      default: "tekton@pipeline.local"
+
+  workspaces:
+    - name: source
+      description: Workspace for git operations
+  steps:
+    - name: git-merge
+      image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9@sha256:8f0494341244a75546a4b80b065702be04e6d200421aa4e7ec90385c9dabc6ab
+      workingDir: /workspace/source
+      env:
+        - name: BITBUCKET_USER
+          valueFrom:
+            secretKeyRef:
+              name: bitbucket-credentials
+              key: username
+        - name: BITBUCKET_PASS
+          valueFrom:
+            secretKeyRef:
+              name: bitbucket-credentials
+              key: password
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        
+        echo "Configuring Git credentials"
+        git config --global user.name "$(params.GIT_USER_NAME)"
+        git config --global user.email "$(params.GIT_USER_EMAIL)"
+
+        echo "Cloning repo $(params.REPO_URL)"
+        git clone https://${BITBUCKET_USER}:${BITBUCKET_PASS}@$(echo $(params.REPO_URL) | sed 's|https://||') repo
+        cd repo
+
+        echo "Fetching all branches..."
+        git fetch --all
+
+        echo "Checking out target branch $(params.TARGET_BRANCH)"
+        git checkout $(params.TARGET_BRANCH)
+        git pull origin $(params.TARGET_BRANCH)
+
+        echo "Merging feature branch $(params.SOURCE_BRANCH) into $(params.TARGET_BRANCH)"
+        set +e
+        git merge --no-ff origin/$(params.SOURCE_BRANCH) -m "Auto-merge: $(params.SOURCE_BRANCH) → $(params.TARGET_BRANCH)"
+        MERGE_EXIT=$?
+        set -e
+
+        if [ $MERGE_EXIT -ne 0 ]; then
+          echo "Merge conflict detected — aborting"
+          git merge --abort
+          exit 1
+        fi
+
+        echo "Pushing merged branch to origin/$(params.TARGET_BRANCH)"
+        git push origin $(params.TARGET_BRANCH)
+        echo "Merge complete!"

@@ -2,18 +2,17 @@ apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: read-pipeline-json
+  namespace: kevin-ocp-pipeline
 spec:
   workspaces:
     - name: output
   results:
     - name: APP_VERSION
       description: "app_version field from pipeline.json"
-
     - name: APP_NAME
       description: "Environment name (env) from pipeline.json"
-      
   steps:
-    - name: read
+    - name: read-pipeline-json
       image: registry.access.redhat.com/ubi9/ubi-minimal
       workingDir: /workspace/output
       script: |

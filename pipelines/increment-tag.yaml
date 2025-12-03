@@ -2,6 +2,7 @@ apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: increment-tag
+  namespace: kevin-ocp-pipeline
 spec:
   params:
   - name: IMAGE

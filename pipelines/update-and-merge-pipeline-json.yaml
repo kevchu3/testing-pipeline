@@ -2,6 +2,7 @@ apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: update-and-merge-pipeline-json
+  namespace: kevin-ocp-pipeline
 spec:
   params:
   - name: NEW_APP_VERSION
